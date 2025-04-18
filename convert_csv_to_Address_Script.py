@@ -8,48 +8,51 @@ def extract_prefix(hostname):
     return re.match(r'^(.*?)(?:\d+)$', hostname).group(1) if re.match(r'^(.*?)(?:\d+)$', hostname) else hostname
 
 def convert_csv_to_firewall_config(csv_file, txt_file):
+    # Initialize configuration lines for addresses
+    config_lines = ['config firewall address']
+    groups = defaultdict(list)  # Create dictionary to group hostnames by prefix
+    addresses = []
+
+    # Mapping of subnet mask to CIDR
+    subnet_to_cidr = {
+        "255.255.255.255": "/32",
+        "255.255.255.254": "/31",
+        "255.255.255.252": "/30",
+        "255.255.255.248": "/29",
+        "255.255.255.240": "/28",
+        "255.255.255.224": "/27",
+        "255.255.255.192": "/26",
+        "255.255.255.128": "/25",
+        "255.255.255.0": "/24",
+        "255.255.254.0": "/23",
+        "255.255.252.0": "/22",
+        "255.255.248.0": "/21",
+        "255.255.240.0": "/20",
+        "255.255.224.0": "/19",
+        "255.255.192.0": "/18",
+        "255.255.128.0": "/17",
+        "255.255.0.0": "/16",
+        "255.254.0.0": "/15",
+        "255.252.0.0": "/14",
+        "255.248.0.0": "/13",
+        "255.240.0.0": "/12",
+        "255.224.0.0": "/11",
+        "255.192.0.0": "/10",
+        "255.128.0.0": "/9",
+        "255.0.0.0": "/8",
+        "254.0.0.0": "/7",
+        "252.0.0.0": "/6",
+        "248.0.0.0": "/5",
+        "240.0.0.0": "/4",
+        "224.0.0.0": "/3",
+        "192.0.0.0": "/2",
+        "128.0.0.0": "/1",
+        "0.0.0.0": "/0"
+    }
+
     # Read CSV and collect information
     with open(csv_file, 'r') as csvfile:
         reader = csv.DictReader(csvfile)
-        groups = defaultdict(list)  # Create dictionary to group hostnames by prefix
-        addresses = []
-
-        # Mapping of subnet mask to CIDR
-        subnet_to_cidr = {
-            "255.255.255.255": "/32",
-            "255.255.255.254": "/31",
-            "255.255.255.252": "/30",
-            "255.255.255.248": "/29",
-            "255.255.255.240": "/28",
-            "255.255.255.224": "/27",
-            "255.255.255.192": "/26",
-            "255.255.255.128": "/25",
-            "255.255.255.0": "/24",
-            "255.255.254.0": "/23",
-            "255.255.252.0": "/22",
-            "255.255.248.0": "/21",
-            "255.255.240.0": "/20",
-            "255.255.224.0": "/19",
-            "255.255.192.0": "/18",
-            "255.255.128.0": "/17",
-            "255.255.0.0": "/16",
-            "255.254.0.0": "/15",
-            "255.252.0.0": "/14",
-            "255.248.0.0": "/13",
-            "255.240.0.0": "/12",
-            "255.224.0.0": "/11",
-            "255.192.0.0": "/10",
-            "255.128.0.0": "/9",
-            "255.0.0.0": "/8",
-            "254.0.0.0": "/7",
-            "252.0.0.0": "/6",
-            "248.0.0.0": "/5",
-            "240.0.0.0": "/4",
-            "224.0.0.0": "/3",
-            "192.0.0.0": "/2",
-            "128.0.0.0": "/1",
-            "0.0.0.0": "/0"
-        }
 
         for row in reader:
             name = row['hostname']
@@ -64,26 +67,27 @@ def convert_csv_to_firewall_config(csv_file, txt_file):
             prefix = extract_prefix(name)
             groups[prefix].append(address_name)
 
-            config_lines = [f'config firewall address']
+            # Add address configuration
             config_lines.append(f'edit "{address_name}"')
             config_lines.append(f'        set subnet {ip} {subnet}')
             if comment:  # Only add set comment if comment is not empty
                 config_lines.append(f'        set comment "{comment}"')
             config_lines.append('next')
-            yield '\n'.join(config_lines) + '\n'
 
-    yield 'end\n'
+    # Close address configuration
+    config_lines.append('end')
+    yield '\n'.join(config_lines) + '\n'
 
     # Create groups based on prefixes
+    config_lines = ['config firewall addrgrp']
     for prefix, members in groups.items():
         if len(members) > 1:  # Create group only if there are more than 1 member
-            config_lines = [f'config firewall addrgrp']
             config_lines.append(f'edit "{prefix}"')
             member_str = ' '.join(f'"{member}"' for member in members)
             config_lines.append(f'        set member {member_str}')
             config_lines.append('next')
-            yield '\n'.join(config_lines) + '\n'
-    yield 'end\n'
+    config_lines.append('end')
+    yield '\n'.join(config_lines) + '\n'
 
 def create_csv_template():
     # Create a sample CSV template file
